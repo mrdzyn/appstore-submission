@@ -1,6 +1,6 @@
 ---
 name: app-store-submission
-description: Use for writing/reviewing App Store or Google Play listings (name, subtitle, description, keywords, ASO, ratings, privacy, checklist) or for auditing a pointed-to project folder's README/docs/manifests for submission compliance risks (permissions, SDKs, tracking, content flags).
+description: Use for writing/reviewing App Store or Google Play listings (name, subtitle, description, keywords, ASO, ratings, privacy, checklist), generating correctly-sized screenshot placeholders with a tickable checklist, or auditing a pointed-to project folder's README/docs/manifests for submission compliance risks.
 ---
 
 # App Store & Google Play Submission Kit
@@ -42,7 +42,7 @@ Gather (only ask for what's still missing after checking the folder, or if no fo
 
 - App name (or working title) and a one-sentence pitch
 - Target audience and the 3–5 features or benefits that matter most to them
-- Platforms: iOS, Android, or both
+- Platforms: iOS, Android, or both, and whether the app supports tablet/iPad layouts specifically (this determines which screenshot slots Step 5 needs to generate)
 - Category (e.g. Productivity, Health & Fitness, Games > Puzzle)
 - New submission or updating an existing live listing (if updating, ask for the current listing text so you edit rather than guess)
 - Pricing model: free, paid, subscription, in-app purchases
@@ -94,7 +94,7 @@ After drafting, read both back and check: does the first line stand alone if not
 Walk through this list with the user; check off what's ready and flag what's missing. If Step 0's folder audit surfaced permissions or SDKs, make sure they're reflected in the privacy/data-safety line item below rather than treated as a separate concern. Note up front that exact pixel dimensions and questionnaire wording on both platforms change periodically — give current best-known guidance below, but tell the user to confirm the live specs in App Store Connect / Play Console at submission time (or check directly if browser tools are available), since submitting against stale dimensions is a common rejection cause.
 
 - **App icon** — Apple: 1024×1024 PNG, no transparency, no pre-rounded corners (the store applies the mask). Google: 512×512 PNG, 32-bit with alpha.
-- **Screenshots** — both stores require screenshots for each supported device size class (e.g. iPhone, iPad on Apple; phone, 7" and 10" tablet on Google, if supporting tablets). Confirm the current required device sizes and minimum counts (usually at least 2–3 per size class) in the console before finalizing artwork.
+- **Screenshots** — see Step 5 below, which generates correctly-sized placeholder files and a checklist for this instead of just describing the requirement.
 - **Preview video** (optional on both) — short, silent-friendly since many users browse muted; captions/on-screen text carry the message.
 - **Category & subcategory** — pick the category real users would browse to find this app, not the most flattering one; miscategorized apps get buried or rejected.
 - **Age / content rating** — Apple uses a questionnaire about violence, mature content, gambling, user-generated content, etc. Google's is the IARC questionnaire, similar territory. Answer honestly based on actual app content — under-rating to reach a wider audience is a common rejection and removal reason. Cross-check against any content-risk flags from Step 0.
@@ -104,9 +104,133 @@ Walk through this list with the user; check off what's ready and flag what's mis
 - **Trademark/guideline check** — the app name and keywords shouldn't include competitor brand names or unapproved references to "App Store"/"Google Play" wording; both stores reject on this.
 - **Claims check** — flag any health, financial, or "#1" superlative claims in the copy that would need a disclaimer or evidence, since these are common review-rejection triggers.
 
-## Step 5 — Deliver as a filled-in template
+## Step 5 — Generate screenshot placeholder slots + a tickable checklist
 
-Produce one document with both stores' fields filled in and the checklist as checkboxes, so the user can copy-paste straight into App Store Connect and Play Console. If a folder was audited, lead with the restrictions/flags summary from Step 0 so it doesn't get buried under the copy. Use this skeleton:
+Screenshots are the one checklist item worth automating: getting exact pixel dimensions right by hand is tedious and easy to get wrong. Instead of just telling the user the required sizes, generate an actual folder of correctly-sized placeholder images they can drop real screenshots into, plus a checklist you both use to track progress.
+
+**Target dimensions** — confirm current values before final submission (Apple in particular has changed which size classes are mandatory more than once, and both stores adjust exact pixel requirements periodically; treat this as a strong default, not gospel):
+
+| Store | Device class | Size (px) | Typical count |
+|---|---|---|---|
+| Apple | iPhone 6.9" (e.g. 16 Pro Max) | 1320 x 2868 | 3–10 |
+| Apple | iPhone 6.5" (e.g. 14 Plus) | 1284 x 2778 | 3–10, often optional once the 6.9" set is uploaded |
+| Apple | iPad 13"/12.9" | 2048 x 2732 | 3–10, only if the app supports iPad |
+| Google | Phone | 1080 x 1920 | 2–8 |
+| Google | 7" tablet | 1200 x 1920 | 0–8, only if optimized for tablets |
+| Google | 10" tablet | 1600 x 2560 | 0–8, only if optimized for tablets |
+
+Only generate slots for the platforms/device classes Step 1 established the app actually targets — don't create an iPad set for a phone-only app.
+
+**Folder layout** — create this inside the audited project folder (Step 0) if there is one, otherwise in the working directory:
+
+```
+assets/screenshots/
+  ios/
+    iphone-6.9/  01_placeholder_1320x2868.png  02_placeholder_...  .manifest.json
+    ipad-13/     ...
+  android/
+    phone/       01_placeholder_1080x1920.png  ...
+    tablet-7in/  ...
+```
+
+**Generate the placeholders** with this dependency-free script — plain `python3`, no Pillow and no network required, which matters because a linked computer's shell may have no internet access at all. Write it to a file, adjust the `SLOTS` list to match what Step 1 established, and run it:
+
+```python
+import struct, zlib, os, hashlib, json
+
+def write_png(path, width, height, fill=(232, 232, 232), border=(176, 176, 176), border_px=10):
+    def chunk(tag, data):
+        return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff)
+    def row(is_border):
+        if is_border:
+            px = bytes(border) * width
+        else:
+            px = bytes(border) * border_px + bytes(fill) * (width - 2 * border_px) + bytes(border) * border_px
+        return b'\x00' + px
+    edge, mid = row(True), row(False)
+    raw = edge * border_px + mid * (height - 2 * border_px) + edge * border_px
+    png = (b'\x89PNG\r\n\x1a\n'
+           + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0))
+           + chunk(b'IDAT', zlib.compress(raw, 6))
+           + chunk(b'IEND', b''))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'wb') as f:
+        f.write(png)
+    return hashlib.md5(png).hexdigest()
+
+# One entry per required screenshot slot: (relative_path, width, height)
+SLOTS = [
+    ("assets/screenshots/ios/iphone-6.9/01_placeholder_1320x2868.png", 1320, 2868),
+    ("assets/screenshots/android/phone/01_placeholder_1080x1920.png", 1080, 1920),
+    # add/remove rows to match the device classes and counts this app needs
+]
+
+manifest = {}
+for path, w, h in SLOTS:
+    manifest[path] = {"expected_width": w, "expected_height": h, "placeholder_md5": write_png(path, w, h)}
+
+with open("assets/screenshots/.manifest.json", "w") as f:
+    json.dump(manifest, f, indent=2)
+print(f"Generated {len(SLOTS)} placeholders + manifest")
+```
+
+**Write the checklist** as `assets/screenshots/CHECKLIST.md`, one line per slot:
+
+```
+# Screenshot checklist
+
+## iOS — iPhone 6.9"
+- [ ] Screenshot 1 (1320x2868) — assets/screenshots/ios/iphone-6.9/01_placeholder_1320x2868.png
+
+## Android — Phone
+- [ ] Screenshot 1 (1080x1920) — assets/screenshots/android/phone/01_placeholder_1080x1920.png
+```
+
+Tell the user: replace each placeholder file (keep the filename or rename it, dimensions are what matters) with a real screenshot at that exact pixel size, then come back and ask you to check.
+
+**Assist by actually verifying, not just waiting to be asked** — when the user says they've added screenshots, or asks you to check, re-scan `assets/screenshots/` against `.manifest.json` with this dependency-free check (reads PNG and JPEG headers directly, no Pillow needed):
+
+```python
+import struct, hashlib, json, os
+
+def get_size(path):
+    with open(path, 'rb') as f:
+        head = f.read(32)
+        if head[:8] == b'\x89PNG\r\n\x1a\n':
+            return struct.unpack('>II', head[16:24])
+        if head[:2] == b'\xff\xd8':
+            f.seek(2)
+            while True:
+                marker = struct.unpack('>H', f.read(2))[0]
+                if not (0xFFC0 <= marker <= 0xFFFE):
+                    return None
+                length = struct.unpack('>H', f.read(2))[0]
+                if 0xFFC0 <= marker <= 0xFFCF and marker not in (0xFFC4, 0xFFC8, 0xFFCC):
+                    f.read(1)
+                    h, w = struct.unpack('>HH', f.read(4))
+                    return (w, h)
+                f.seek(length - 2, 1)
+    return None
+
+manifest = json.load(open("assets/screenshots/.manifest.json"))
+for path, spec in manifest.items():
+    if not os.path.exists(path):
+        print(f"MISSING  {path}"); continue
+    still_placeholder = hashlib.md5(open(path, 'rb').read()).hexdigest() == spec["placeholder_md5"]
+    actual = get_size(path)
+    if still_placeholder:
+        print(f"TODO     {path} — still the placeholder, not replaced yet")
+    elif actual != (spec["expected_width"], spec["expected_height"]):
+        print(f"WRONG    {path} — is {actual}, needs {spec['expected_width']}x{spec['expected_height']}")
+    else:
+        print(f"DONE     {path}")
+```
+
+Use the output to flip the matching `- [ ]` to `- [x]` in `CHECKLIST.md`, and tell the user plainly which files are still missing, still placeholders, or the wrong size — don't say "looks good" without having actually run the check. If a screenshot is in a format this can't read (WEBP, HEIC, etc.), say so and ask the user to confirm its dimensions manually or convert it first. Once every slot shows DONE, that satisfies the Screenshots line in Step 4's checklist.
+
+## Step 6 — Deliver as a filled-in template
+
+Produce one document with both stores' fields filled in and the checklist as checkboxes, so the user can copy-paste straight into App Store Connect and Play Console. If a folder was audited, lead with the restrictions/flags summary from Step 0 so it doesn't get buried under the copy, and mention the `assets/screenshots/` folder and its `CHECKLIST.md` if Step 5 ran. Use this skeleton:
 
 ```
 # [App Name] — Store Submission Package
@@ -131,7 +255,7 @@ Produce one document with both stores' fields filled in and the checklist as che
 
 ## Submission checklist
 - [ ] App icon (1024×1024 Apple / 512×512 Google)
-- [ ] Screenshots for each required device size — verify current sizes in console
+- [ ] Screenshots — see assets/screenshots/CHECKLIST.md
 - [ ] Preview video (optional)
 - [ ] Category / subcategory
 - [ ] Age / content rating questionnaire completed honestly

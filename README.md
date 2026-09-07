@@ -7,6 +7,8 @@ A [Claude Skill](https://www.anthropic.com/news/skills) that turns app details �
 - **Writes listing copy for both stores separately** — Apple App Store Connect (name, subtitle, promotional text, description, keywords, what's new) and Google Play Console (name, short description, full description) — respecting each store's character limits and how each one actually indexes for search.
 - **Audits a project folder**, when you point it at one: reads `README.md` / `CHANGELOG.md` / `docs/*.md` for app facts, and platform manifests (`Info.plist`, `AndroidManifest.xml`, `Podfile`, `build.gradle`, `app.json`, `pubspec.yaml`, `package.json`, etc.) for permissions and third-party SDKs — then flags anything that needs a matching privacy/data-safety disclosure, an ATT mismatch, an export-compliance trigger, or a content-rating concern.
 - **Gives ASO / keyword strategy** — how to pick and prioritize keywords for each store, with an honest note that suggestions are best-practice reasoning, not live search-volume data.
+- **Generates correctly-sized screenshot placeholders** — a real `assets/screenshots/` folder with a blank, exact-pixel-dimension PNG for every screenshot slot your platforms need, plus a `CHECKLIST.md` to tick off. No dependencies (pure Python stdlib), so it works even in a locked-down shell with no internet access.
+- **Verifies your screenshots when you're done** — re-scans the folder, tells you which slots are still placeholders, which are the wrong size, and which are good to go, and updates the checklist itself.
 - **Runs the full submission checklist** — icons, screenshots, age/content rating, privacy disclosures, pricing & availability, trademark and claims checks — with a reminder to verify exact current specs in the live consoles, since Apple and Google change these periodically.
 - **Delivers a fill-in-the-blank template** ready to paste straight into both consoles.
 
@@ -23,6 +25,7 @@ This is a [Claude Skill](https://www.anthropic.com/news/skills) — a markdown f
 - *"Write my App Store and Play Store listing for a habit tracker called Loop — it's free with a premium subscription."*
 - *"Audit ~/projects/my-app for anything that could hold up app store submission."*
 - *"Here's my current Play Store description, can you tighten it up and suggest better keywords?"*
+- *"Set up my screenshot folders and checklist for iOS and Android."* / *"I've added my screenshots, can you check them?"*
 
 ## Scope and limits
 
